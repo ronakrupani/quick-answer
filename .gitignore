@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Packaging output
+*.zip
+*.crx
+*.pem
+
+# Nothing in this project is built or installed, but just in case
+node_modules/
+npm-debug.log*
