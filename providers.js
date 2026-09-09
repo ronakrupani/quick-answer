@@ -85,6 +85,38 @@ var QA_PROVIDERS = {
     }
   },
 
+  groq: {
+    label: 'Groq',
+    defaultModel: 'llama-3.1-8b-instant',
+    models: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b'],
+    keyHint: 'Starts with gsk_. From console.groq.com under API Keys.',
+    modelHint: 'llama-3.1-8b-instant is the quickest and is plenty for one-line answers.',
+    request(key, model, system, text) {
+      return {
+        // Groq speaks the OpenAI chat-completions shape on its own base URL.
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer ' + key
+        },
+        body: {
+          model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: text }
+          ]
+        }
+      };
+    },
+    answer(json) {
+      const choice = json && json.choices && json.choices[0];
+      return (choice && choice.message && choice.message.content) || '';
+    },
+    error(json) {
+      return json && json.error && json.error.message;
+    }
+  },
+
   google: {
     label: 'Google (Gemini API)',
     defaultModel: 'gemini-2.0-flash',

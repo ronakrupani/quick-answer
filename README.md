@@ -55,7 +55,7 @@ Three modes:
 - **Built-in AI, fall back to API** Stays local when it can. Uses your key only when the built-in model is genuinely unavailable.
 - **API only** Always uses your key.
 
-Supported providers: Anthropic, OpenAI, and the Google Gemini API. Paste a key, pick a model, and press **Test connection** to confirm it works before saving. Cheap models are more than adequate here, since answers are one sentence.
+Supported providers: Anthropic, OpenAI, Groq, and the Google Gemini API. Paste a key, pick a model, and press **Test connection** to confirm it works before saving. Cheap models are more than adequate here, since answers are one sentence.
 
 Where the key is kept:
 
@@ -75,6 +75,7 @@ These are inherent to how Chrome extensions and on-device models work, not bugs 
 - **One popup at a time.** Opening a new answer replaces the previous popup.
 - **Cross-origin iframes.** Selections inside an iframe are handled, but the popup is drawn inside that frame, so it is clipped to the frame's bounds.
 - **API answers do not stream.** Hosted models reply in about a second and the answer is one sentence, so the popup shows the loading dots and then the finished answer. Streaming is used for the built-in model, where it genuinely helps.
+- **Groq model ids move.** Groq retires and renames models fairly often. If a model id stops working, check console.groq.com/docs/models and type the current id into the Model box, which accepts any value rather than only the listed ones.
 - **The browser-access header is unverified.** Anthropic blocks browser-origin requests by default. The extension sends `anthropic-dangerous-direct-browser-access: true`, which an extension service worker may not need. It is harmless if the server ignores it. **Test connection** tells you the truth in one click.
 
 ## How to update
