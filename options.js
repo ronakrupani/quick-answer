@@ -33,7 +33,19 @@
 
   function syncProviderFields(keepModel) {
     const p = QA_PROVIDERS[providerSel.value] || QA_PROVIDERS.anthropic;
-    $('key-hint').textContent = p.keyHint;
+
+    // Hint plus a direct link to that provider's key page. Built with DOM
+    // calls rather than innerHTML so provider strings are never parsed as markup.
+    const hint = $('key-hint');
+    hint.textContent = p.keyHint + ' ';
+    if (p.keyUrl) {
+      const a = document.createElement('a');
+      a.href = p.keyUrl;
+      a.target = '_blank';
+      a.rel = 'noreferrer noopener';
+      a.textContent = 'Get a key';
+      hint.appendChild(a);
+    }
     $('model-hint').textContent = p.modelHint;
     modelList.textContent = '';
     for (const m of p.models) modelList.append(new Option(m));

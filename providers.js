@@ -13,7 +13,8 @@ var QA_PROVIDERS = {
     label: 'Anthropic (Claude)',
     defaultModel: 'claude-opus-5',
     models: ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
-    keyHint: 'Starts with sk-ant-. From console.anthropic.com under API Keys.',
+    keyHint: 'Starts with sk-ant-.',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
     modelHint: 'claude-haiku-4-5 is the cheapest and is plenty for one-line answers.',
     request(key, model, system, text) {
       const body = {
@@ -56,7 +57,8 @@ var QA_PROVIDERS = {
     label: 'OpenAI',
     defaultModel: 'gpt-4o-mini',
     models: ['gpt-4o-mini', 'gpt-4o'],
-    keyHint: 'Starts with sk-. From platform.openai.com under API keys.',
+    keyHint: 'Starts with sk-.',
+    keyUrl: 'https://platform.openai.com/api-keys',
     modelHint: 'Any chat-completions model id works. Type your own if it is not listed.',
     request(key, model, system, text) {
       return {
@@ -89,7 +91,8 @@ var QA_PROVIDERS = {
     label: 'Groq',
     defaultModel: 'llama-3.1-8b-instant',
     models: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b'],
-    keyHint: 'Starts with gsk_. From console.groq.com under API Keys.',
+    keyHint: 'Starts with gsk_.',
+    keyUrl: 'https://console.groq.com/keys',
     modelHint: 'llama-3.1-8b-instant is the quickest and is plenty for one-line answers.',
     request(key, model, system, text) {
       return {
@@ -121,7 +124,8 @@ var QA_PROVIDERS = {
     label: 'Google (Gemini API)',
     defaultModel: 'gemini-2.0-flash',
     models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite'],
-    keyHint: 'From aistudio.google.com under Get API key.',
+    keyHint: 'Created in Google AI Studio.',
+    keyUrl: 'https://aistudio.google.com/apikey',
     modelHint: 'This is the cloud Gemini API, separate from the built-in on-device model.',
     request(key, model, system, text) {
       return {
