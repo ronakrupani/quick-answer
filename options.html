@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quick Answer settings</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0; padding: 28px 30px 40px; max-width: 560px; color: #1a1a1a; background: #fff;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .lede { color: #666; margin: 0 0 24px; }
+  fieldset { border: 1px solid rgba(0,0,0,.14); border-radius: 8px; padding: 14px 16px 16px; margin: 0 0 18px; }
+  legend { padding: 0 6px; font-weight: 600; }
+  label { display: block; margin: 12px 0 4px; font-weight: 500; }
+  label:first-of-type { margin-top: 0; }
+  select, input[type=text], input[type=password] {
+    width: 100%; box-sizing: border-box; padding: 7px 9px; font: inherit;
+    border: 1px solid rgba(0,0,0,.22); border-radius: 6px; background: #fff; color: inherit;
+  }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input { flex: 1; }
+  .hint { color: #666; font-size: 12px; margin: 5px 0 0; }
+  .radio { display: flex; gap: 9px; align-items: flex-start; margin: 9px 0; font-weight: 400; }
+  .radio input { margin: 2px 0 0; }
+  .radio span b { display: block; font-weight: 600; }
+  .radio span i { font-style: normal; color: #666; font-size: 12px; }
+  button {
+    font: inherit; padding: 7px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid rgba(0,0,0,.22); background: #f6f6f6; color: inherit;
+  }
+  button.primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; font-weight: 500; }
+  button:disabled { opacity: .55; cursor: default; }
+  .actions { display: flex; gap: 9px; align-items: center; }
+  #status { min-height: 18px; margin: 12px 0 0; font-size: 12px; }
+  .ok { color: #1a7f37; } .bad { color: #b3261e; } .busy { color: #666; }
+  .warn {
+    margin: 0 0 18px; padding: 10px 12px; border-radius: 8px; font-size: 12px;
+    background: #fff8e5; border: 1px solid #f0d795; color: #6b5312;
+  }
+  .cloud-only { display: none; }
+  body.show-cloud .cloud-only { display: block; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1c1c1c; color: #ececec; }
+    .lede, .hint, .radio span i { color: #a3a3a3; }
+    fieldset { border-color: rgba(255,255,255,.16); }
+    select, input[type=text], input[type=password] { background: #262626; border-color: rgba(255,255,255,.22); }
+    button { background: #2e2e2e; border-color: rgba(255,255,255,.22); }
+    button.primary { background: #ececec; color: #1a1a1a; border-color: #ececec; }
+    .warn { background: #33290d; border-color: #6b5312; color: #f0d795; }
+    .ok { color: #4ac26b; } .bad { color: #ff8175; }
+  }
+</style>
+</head>
+<body>
+  <h1>Quick Answer</h1>
+  <p class="lede">By default everything runs on your machine with Chrome's built-in AI. An API key is optional, for machines that cannot run the built-in model.</p>
+
+  <fieldset>
+    <legend>Where answers come from</legend>
+
+    <div class="radio"><input type="radio" name="mode" id="m-builtin" value="builtin">
+      <label for="m-builtin"><span><b>Built-in AI only</b><i>Fully offline. Nothing leaves your machine. Needs Chrome 138+ and capable hardware.</i></span></label></div>
+
+    <div class="radio"><input type="radio" name="mode" id="m-auto" value="auto">
+      <label for="m-auto"><span><b>Built-in AI, fall back to API</b><i>Stays local when it can. Uses your key only when the built-in model is unavailable.</i></span></label></div>
+
+    <div class="radio"><input type="radio" name="mode" id="m-cloud" value="cloud">
+      <label for="m-cloud"><span><b>API only</b><i>Always uses your key. Better answers, but every selection is sent to the provider.</i></span></label></div>
+  </fieldset>
+
+  <div class="cloud-only">
+    <p class="warn"><b>Your selected text leaves your machine.</b> Whatever you highlight is sent to the provider you pick below, under your own account and billing. Your key is stored in this browser profile only and is never synced or sent anywhere except that provider.</p>
+
+    <fieldset>
+      <legend>API</legend>
+
+      <label for="provider">Provider</label>
+      <select id="provider"></select>
+
+      <label for="key">API key</label>
+      <div class="row">
+        <input type="password" id="key" autocomplete="off" spellcheck="false" placeholder="Paste your key">
+        <button type="button" id="reveal">Show</button>
+      </div>
+      <p class="hint" id="key-hint"></p>
+
+      <label for="model">Model</label>
+      <input type="text" id="model" list="model-list" spellcheck="false">
+      <datalist id="model-list"></datalist>
+      <p class="hint" id="model-hint"></p>
+    </fieldset>
+  </div>
+
+  <div class="actions">
+    <button type="button" class="primary" id="save">Save</button>
+    <button type="button" id="test">Test connection</button>
+  </div>
+  <p id="status"></p>
+
+  <!-- providers.js first: options.js reads QA_PROVIDERS / QA_DEFAULTS from it. -->
+  <script src="providers.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
