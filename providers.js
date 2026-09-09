@@ -43,6 +43,19 @@ var QA_PROVIDERS = {
         body
       };
     },
+    modelsRequest(key) {
+      return {
+        url: 'https://api.anthropic.com/v1/models?limit=1000',
+        headers: {
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        }
+      };
+    },
+    modelList(json) {
+      return ((json && json.data) || []).map((m) => m && m.id).filter(Boolean);
+    },
     answer(json) {
       // The content array can hold thinking blocks before the text ones.
       const blocks = Array.isArray(json && json.content) ? json.content : [];
@@ -78,6 +91,12 @@ var QA_PROVIDERS = {
         }
       };
     },
+    modelsRequest(key) {
+      return { url: 'https://api.openai.com/v1/models', headers: { authorization: 'Bearer ' + key } };
+    },
+    modelList(json) {
+      return ((json && json.data) || []).map((m) => m && m.id).filter(Boolean);
+    },
     answer(json) {
       const choice = json && json.choices && json.choices[0];
       return (choice && choice.message && choice.message.content) || '';
@@ -89,11 +108,14 @@ var QA_PROVIDERS = {
 
   groq: {
     label: 'Groq',
-    defaultModel: 'llama-3.1-8b-instant',
-    models: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b'],
+    // The Llama ids Groq's models page still advertises were retired in
+    // Aug 2026; their deprecations page is the accurate one. Use "Load my
+    // models" to read the live list rather than trusting anything hardcoded.
+    defaultModel: 'openai/gpt-oss-20b',
+    models: ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.6-27b'],
     keyHint: 'Starts with gsk_.',
     keyUrl: 'https://console.groq.com/keys',
-    modelHint: 'llama-3.1-8b-instant is the quickest and is plenty for one-line answers.',
+    modelHint: 'gpt-oss-20b is the quickest and is plenty for one-line answers.',
     request(key, model, system, text) {
       return {
         // Groq speaks the OpenAI chat-completions shape on its own base URL.
@@ -110,6 +132,12 @@ var QA_PROVIDERS = {
           ]
         }
       };
+    },
+    modelsRequest(key) {
+      return { url: 'https://api.groq.com/openai/v1/models', headers: { authorization: 'Bearer ' + key } };
+    },
+    modelList(json) {
+      return ((json && json.data) || []).map((m) => m && m.id).filter(Boolean);
     },
     answer(json) {
       const choice = json && json.choices && json.choices[0];
@@ -143,6 +171,20 @@ var QA_PROVIDERS = {
         }
       };
     },
+    modelsRequest(key) {
+      return {
+        url: 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000',
+        headers: { 'x-goog-api-key': key }
+      };
+    },
+    modelList(json) {
+      // Google returns "models/gemini-x"; the generate call wants the bare id.
+      return ((json && json.models) || [])
+        .filter((m) => !m.supportedGenerationMethods ||
+                       m.supportedGenerationMethods.indexOf('generateContent') !== -1)
+        .map((m) => String((m && m.name) || '').replace(/^models\//, ''))
+        .filter(Boolean);
+    },
     answer(json) {
       const cand = json && json.candidates && json.candidates[0];
       const parts = (cand && cand.content && cand.content.parts) || [];
@@ -154,6 +196,13 @@ var QA_PROVIDERS = {
   }
 };
 
+/** Providers like OpenAI list embeddings, audio and image models too. */
+var QA_NON_CHAT = /embed|whisper|tts|audio|transcrib|dall-e|moderation|guard|image|vision-preview|rerank/i;
+
+function qaChatModels(ids) {
+  return ids.filter((id) => !QA_NON_CHAT.test(id)).sort();
+}
+
 var QA_DEFAULTS = {
   mode: 'builtin',      // 'builtin' | 'auto' | 'cloud'
   provider: 'anthropic',
@@ -162,5 +211,5 @@ var QA_DEFAULTS = {
 };
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { QA_PROVIDERS, QA_DEFAULTS };
+  module.exports = { QA_PROVIDERS, QA_DEFAULTS, qaChatModels };
 }

@@ -192,6 +192,39 @@ async function askCloud(settings, text) {
   return answer;
 }
 
+/** Ask the provider which models this key can actually use. */
+async function listModels(settings) {
+  const provider = QA_PROVIDERS[settings.provider];
+  if (!provider || typeof provider.modelsRequest !== 'function') {
+    throw new Error('That provider cannot list models.');
+  }
+  const { url, headers } = provider.modelsRequest(settings.apiKey);
+
+  let res;
+  try {
+    res = await fetch(url, { method: 'GET', headers });
+  } catch (err) {
+    console.error('[Quick Answer] models request failed:', err);
+    throw new Error('Could not reach ' + provider.label + '. Check your connection.');
+  }
+
+  const raw = await res.text();
+  let json = null;
+  try { json = JSON.parse(raw); } catch (err) { /* handled below */ }
+
+  if (!res.ok) {
+    const detail = (json && provider.error(json)) || '';
+    console.error('[Quick Answer]', provider.label, 'models HTTP', res.status, detail || raw.slice(0, 300));
+    if (res.status === 401 || res.status === 403) throw new Error('That API key was rejected.');
+    throw new Error(detail ? detail.slice(0, 140) : provider.label + ' returned HTTP ' + res.status + '.');
+  }
+  if (!json) throw new Error(provider.label + ' returned a model list we could not read.');
+
+  const models = qaChatModels(provider.modelList(json));
+  if (!models.length) throw new Error('No chat models are available on this key.');
+  return models;
+}
+
 /* ---------------------------------------------------------- menu click */
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -352,6 +385,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then((text) => sendResponse({ ok: true, sample: tidy(text) }))
       .catch((err) => sendResponse({ ok: false, message: (err && err.message) || 'Test failed.' }));
     return true;   // keep the channel open for the async reply
+  }
+
+  // The options page "Load my models" button.
+  if (message.type === 'QA_MODELS') {
+    const settings = Object.assign({}, QA_DEFAULTS, message.settings || {});
+    listModels(settings)
+      .then((models) => sendResponse({ ok: true, models }))
+      .catch((err) => sendResponse({ ok: false, message: (err && err.message) || 'Could not list models.' }));
+    return true;
   }
 
   return false;

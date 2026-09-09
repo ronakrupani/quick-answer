@@ -99,6 +99,30 @@
     return null;
   }
 
+  // Provider docs go stale (Groq retired two model ids while their models page
+  // still advertised them). This asks the provider what the key can actually use.
+  $('load-models').addEventListener('click', () => {
+    const settings = collect();
+    if (!settings.apiKey) return say('Enter an API key first.', 'bad');
+    say('Loading models...', 'busy');
+    $('load-models').disabled = true;
+    chrome.runtime.sendMessage({ type: 'QA_MODELS', settings }, (res) => {
+      $('load-models').disabled = false;
+      if (chrome.runtime.lastError) return say(chrome.runtime.lastError.message, 'bad');
+      if (!res) return say('No response from the extension service worker.', 'bad');
+      if (!res.ok) return say(res.message, 'bad');
+      modelList.textContent = '';
+      for (const m of res.models) modelList.append(new Option(m));
+      if (res.models.indexOf(modelInput.value) === -1) {
+        const was = modelInput.value;
+        modelInput.value = res.models[0];
+        return say(`"${was}" is not on your account. Switched to ${res.models[0]}. ` +
+                   `${res.models.length} models available in the dropdown.`, 'ok');
+      }
+      say(`${res.models.length} models available. "${modelInput.value}" is valid.`, 'ok');
+    });
+  });
+
   $('save').addEventListener('click', () => {
     const settings = collect();
     const problem = validate(settings);
