@@ -92,6 +92,40 @@
     statusEl.className = cls || '';
   }
 
+  /**
+   * chrome.runtime.lastError from sendMessage is almost always one thing: the
+   * background worker did not answer. That happens when the extension files
+   * were updated without reloading, or the worker failed to start. Say so.
+   */
+  function explainSendError(err) {
+    const raw = (err && err.message) || String(err);
+    if (/message port closed|Receiving end does not exist|Could not establish connection/i.test(raw)) {
+      return 'The extension\'s background script did not respond. Open chrome://extensions, ' +
+             'click the reload icon on Quick Answer, then reopen this page. If it keeps happening, ' +
+             'click "Errors" on the extension card and send me what it says.';
+    }
+    return raw;
+  }
+
+  // Ping the worker on load so a dead or stale worker is obvious immediately,
+  // rather than discovered when a button silently fails.
+  function checkWorker() {
+    let answered = false;
+    try {
+      chrome.runtime.sendMessage({ type: 'QA_PING' }, (res) => {
+        answered = true;
+        if (chrome.runtime.lastError || !res || !res.ok) {
+          say(explainSendError(chrome.runtime.lastError || { message: 'message port closed' }), 'bad');
+        }
+      });
+    } catch (err) {
+      say(explainSendError(err), 'bad');
+      return;
+    }
+    // A wedged worker may never call back at all.
+    setTimeout(() => { if (!answered) say(explainSendError({ message: 'message port closed' }), 'bad'); }, 4000);
+  }
+
   /* --------------------------------------------------------------- loading */
 
   chrome.storage.local.get(QA_DEFAULTS, (stored) => {
@@ -105,6 +139,7 @@
     backupModelInput.value = current.backupModel || '';
     syncBackupFields(true);
     chrome.storage.local.get('lastFailover', (r) => showFailoverNote(r && r.lastFailover));
+    checkWorker();
     syncProviderFields(true);
     modelInput.value = current.model || QA_PROVIDERS[providerSel.value].defaultModel;
     syncCloudVisibility();
@@ -173,8 +208,8 @@
       $(buttonId).disabled = true;
       chrome.runtime.sendMessage({ type: 'QA_MODELS', settings, slot }, (res) => {
         $(buttonId).disabled = false;
-        if (chrome.runtime.lastError) return say(chrome.runtime.lastError.message, 'bad');
-        if (!res) return say('No response from the extension service worker.', 'bad');
+        if (chrome.runtime.lastError) return say(explainSendError(chrome.runtime.lastError), 'bad');
+        if (!res) return say(explainSendError({ message: 'message port closed' }), 'bad');
         if (!res.ok) return say(res.message, 'bad');
         list.textContent = '';
         for (const m of res.models) list.append(new Option(m));
@@ -217,8 +252,8 @@
     $('test').disabled = true;
     chrome.runtime.sendMessage({ type: 'QA_TEST', settings }, (res) => {
       $('test').disabled = false;
-      if (chrome.runtime.lastError) return say(chrome.runtime.lastError.message, 'bad');
-      if (!res) return say('No response from the extension service worker.', 'bad');
+      if (chrome.runtime.lastError) return say(explainSendError(chrome.runtime.lastError), 'bad');
+      if (!res) return say(explainSendError({ message: 'message port closed' }), 'bad');
       if (!res.results || !res.results.length) return say(res.message || 'Test failed.', 'bad');
       statusEl.textContent = '';
       statusEl.className = '';

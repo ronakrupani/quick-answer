@@ -519,29 +519,50 @@ async function handle(info, tab) {
 
 /* ------------------------------------------- content -> background pings */
 
+/**
+ * Always answer. A handler that rejects without responding leaves the options
+ * page with "The message port closed before a response was received", which
+ * says nothing about what went wrong.
+ */
+function reply(promise, sendResponse, fallback) {
+  Promise.resolve(promise)
+    .then((result) => sendResponse(result))
+    .catch((err) => {
+      console.error('[Quick Answer] handler failed:', err);
+      sendResponse(Object.assign({ ok: false, message: (err && err.message) || fallback }, {}));
+    });
+  return true;   // keep the channel open for the async reply
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return false;
 
-  if (message.type === 'QA_PING') {
-    sendResponse({ ok: true });
+  try {
+    if (message.type === 'QA_PING') {
+      sendResponse({ ok: true, version: chrome.runtime.getManifest().version });
+      return false;
+    }
+
+    // The options page "Test connection" button. Uses the settings currently in
+    // the form, so you can verify a key before saving it.
+    if (message.type === 'QA_TEST') {
+      const settings = Object.assign({}, QA_DEFAULTS, message.settings || {});
+      return reply(testKeys(settings), sendResponse, 'Test failed.');
+    }
+
+    // The options page "Load my models" button.
+    if (message.type === 'QA_MODELS') {
+      const settings = Object.assign({}, QA_DEFAULTS, message.settings || {});
+      return reply(
+        listModels(settings, message.slot).then((models) => ({ ok: true, models })),
+        sendResponse,
+        'Could not list models.'
+      );
+    }
+  } catch (err) {
+    console.error('[Quick Answer] listener threw:', err);
+    sendResponse({ ok: false, message: (err && err.message) || 'Unexpected error.' });
     return false;
-  }
-
-  // The options page "Test connection" button. Uses the settings currently in
-  // the form, so you can verify a key before saving it.
-  if (message.type === 'QA_TEST') {
-    const settings = Object.assign({}, QA_DEFAULTS, message.settings || {});
-    testKeys(settings).then(sendResponse);
-    return true;   // keep the channel open for the async reply
-  }
-
-  // The options page "Load my models" button.
-  if (message.type === 'QA_MODELS') {
-    const settings = Object.assign({}, QA_DEFAULTS, message.settings || {});
-    listModels(settings, message.slot)
-      .then((models) => sendResponse({ ok: true, models }))
-      .catch((err) => sendResponse({ ok: false, message: (err && err.message) || 'Could not list models.' }));
-    return true;
   }
 
   return false;
