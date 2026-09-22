@@ -206,7 +206,8 @@ function qaChatModels(ids) {
 var QA_DEFAULTS = {
   mode: 'builtin',      // 'builtin' | 'auto' | 'cloud'
   provider: 'anthropic',
-  apiKey: '',
+  apiKey: '',           // primary key
+  backupKey: '',        // optional; used when the primary is rejected, rate limited, or out of credits
   model: ''
 };
 

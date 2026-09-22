@@ -57,10 +57,12 @@ Three modes:
 
 Supported providers: Anthropic, OpenAI, Groq, and the Google Gemini API. Paste a key, then press **Load my models** to pull the list your key can actually use, and **Test connection** to confirm it works before saving. Cheap models are more than adequate here, since answers are one sentence.
 
+**Backup key.** You can add a second key for the same provider, for example from a second account. It is used automatically when the primary key is out of credits, over its rate limit, or rejected. Once that happens the primary is skipped for ten minutes so every request does not burn a failed call on it, and the settings page shows a note saying when and why, so an exhausted key does not go unnoticed just because the backup kept things working. **Test connection** checks both keys separately. Server errors and network failures do not trigger the backup, since it would hit the same wall.
+
 Where the key is kept:
 
 - In `chrome.storage.local`, which lives in this browser profile on this machine. It is not `storage.sync`, so it never travels to your Google account or your other devices.
-- It is sent to the provider you chose and nowhere else. It is never written to the console or to any log.
+- Both keys are sent to the provider you chose and nowhere else. Neither is ever written to the console or to any log.
 - Anyone with access to your computer and your Chrome profile can read it, the same as a saved password. Treat it accordingly, and revoke the key from the provider's dashboard if the machine is shared or lost.
 
 ## Known limits

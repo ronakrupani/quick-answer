@@ -145,24 +145,72 @@ function cloudReady(settings) {
   return !!(settings && settings.apiKey && QA_PROVIDERS[settings.provider]);
 }
 
+/* ------------------------------------------------------------ key failover */
+
+/** Ordered keys to try. The primary goes first unless it is cooling down. */
+function keysFor(settings) {
+  const out = [];
+  if (settings.apiKey) out.push({ slot: 'primary', key: settings.apiKey });
+  if (settings.backupKey && settings.backupKey !== settings.apiKey) {
+    out.push({ slot: 'backup', key: settings.backupKey });
+  }
+  return out;
+}
+
 /**
- * One non-streaming request to the configured provider.
- * Cloud models answer in about a second, and the answer is one sentence, so
- * streaming would add an SSE parser per provider for no perceptible gain.
- * Throws an Error whose message is safe to show in the popup.
+ * Failures that mean "this key is spent, try the other one". A key that is
+ * out of credits, over quota, rate limited, or revoked all qualify. Network
+ * errors and provider 5xx do not: the backup would hit the same wall.
  */
-async function askCloud(settings, text) {
-  const provider = QA_PROVIDERS[settings.provider];
-  if (!provider) throw new Error('That provider is not configured.');
-  const model = settings.model || provider.defaultModel;
-  const { url, headers, body } = provider.request(settings.apiKey, model, SYSTEM_PROMPT, text);
+function shouldFailover(err) {
+  if (!err) return false;
+  if (err.status === 401 || err.status === 402 || err.status === 403 || err.status === 429) return true;
+  return /credit|quota|billing|balance|insufficient|exceeded|limit/i.test(String(err.detail || ''));
+}
+
+// After the primary fails over, skip it for a while instead of burning a
+// failed request on it every time. Ten minutes is long enough to stop the
+// churn and short enough that a topped-up account comes back on its own.
+const COOLDOWN_MS = 10 * 60 * 1000;
+
+// chrome.storage.session survives the worker being killed, which a module
+// variable does not, and is wiped when Chrome quits, which is what we want.
+async function cooldownUntil() {
+  try {
+    const { keyCooldown } = await chrome.storage.session.get('keyCooldown');
+    return Number(keyCooldown) || 0;
+  } catch (err) {
+    return 0;
+  }
+}
+async function setCooldown(until) {
+  try {
+    await chrome.storage.session.set({ keyCooldown: until });
+  } catch (err) {
+    console.debug('[Quick Answer] storage.session unavailable:', err && err.message);
+  }
+}
+async function noteFailover(slot, reason) {
+  try {
+    await chrome.storage.local.set({ lastFailover: { at: Date.now(), from: slot, reason } });
+  } catch (err) {
+    /* purely informational */
+  }
+}
+
+/**
+ * One attempt with one key. Throws an Error carrying `.status` and `.detail`
+ * so the caller can decide whether another key is worth trying.
+ */
+async function callProvider(provider, key, model, text) {
+  const { url, headers, body } = provider.request(key, model, SYSTEM_PROMPT, text);
 
   let res;
   try {
     res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   } catch (err) {
     // Network down, DNS, or a CORS rejection all land here.
-    console.error('[Quick Answer] network error calling', settings.provider, err);
+    console.error('[Quick Answer] network error calling', provider.label, err);
     throw new Error('Could not reach ' + provider.label + '. Check your connection.');
   }
 
@@ -177,10 +225,16 @@ async function askCloud(settings, text) {
   if (!res.ok) {
     const detail = (json && provider.error(json)) || '';
     console.error('[Quick Answer]', provider.label, 'HTTP', res.status, detail || raw.slice(0, 300));
-    if (res.status === 401 || res.status === 403) throw new Error('That API key was rejected.');
-    if (res.status === 429) throw new Error('Rate limited by ' + provider.label + '. Try again shortly.');
-    if (res.status >= 500) throw new Error(provider.label + ' is having trouble. Try again shortly.');
-    throw new Error(detail ? detail.slice(0, 140) : provider.label + ' returned HTTP ' + res.status + '.');
+    let message;
+    if (res.status === 401 || res.status === 403) message = 'That API key was rejected.';
+    else if (res.status === 402) message = 'That API key is out of credits.';
+    else if (res.status === 429) message = 'Rate limited by ' + provider.label + '. Try again shortly.';
+    else if (res.status >= 500) message = provider.label + ' is having trouble. Try again shortly.';
+    else message = detail ? detail.slice(0, 140) : provider.label + ' returned HTTP ' + res.status + '.';
+    const err = new Error(message);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
   }
   if (!json) throw new Error(provider.label + ' returned a response we could not read.');
 
@@ -192,13 +246,83 @@ async function askCloud(settings, text) {
   return answer;
 }
 
+/**
+ * Ask the configured provider, trying the backup key if the primary is spent.
+ * Non-streaming: cloud models answer in about a second and the answer is one
+ * sentence, so streaming would add an SSE parser per provider for no gain.
+ * Throws an Error whose message is safe to show in the popup.
+ */
+async function askCloud(settings, text) {
+  const provider = QA_PROVIDERS[settings.provider];
+  if (!provider) throw new Error('That provider is not configured.');
+  const model = settings.model || provider.defaultModel;
+
+  let keys = keysFor(settings);
+  if (!keys.length) throw new Error('No API key is configured.');
+
+  // Move a cooling-down primary to the end rather than dropping it, so a
+  // request still reaches it if the backup is also dead.
+  if (keys.length > 1 && (await cooldownUntil()) > Date.now()) {
+    keys = keys.slice(1).concat(keys[0]);
+  }
+
+  let lastErr = null;
+  for (let i = 0; i < keys.length; i++) {
+    const { slot, key } = keys[i];
+    try {
+      const answer = await callProvider(provider, key, model, text);
+      if (slot === 'backup' && lastErr) {
+        console.log('[Quick Answer] primary key failed (' + lastErr.message + '), answered with backup.');
+      }
+      return answer;
+    } catch (err) {
+      lastErr = err;
+      const more = i < keys.length - 1;
+      if (more && shouldFailover(err)) {
+        console.warn('[Quick Answer]', slot, 'key failed:', err.message, '- trying the', keys[i + 1].slot);
+        if (slot === 'primary') {
+          await setCooldown(Date.now() + COOLDOWN_MS);
+          await noteFailover(slot, err.message);
+        }
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr || new Error('Could not get an answer.');
+}
+
+/**
+ * Test every configured key on its own, with no failover, so the options page
+ * can show the state of each rather than only whether one of them works.
+ */
+async function testKeys(settings) {
+  const provider = QA_PROVIDERS[settings.provider];
+  const keys = keysFor(settings);
+  if (!provider || !keys.length) {
+    return { ok: false, results: [], message: 'No API key is configured.' };
+  }
+  const model = settings.model || provider.defaultModel;
+  const results = await Promise.all(keys.map(({ slot, key }) =>
+    callProvider(provider, key, model, 'Define the word "test" in three words.')
+      .then((text) => ({ slot, ok: true, sample: tidy(text) }))
+      .catch((err) => ({ slot, ok: false, message: (err && err.message) || 'Test failed.' }))
+  ));
+  // A healthy primary means any cooldown on it is stale.
+  if (results[0] && results[0].slot === 'primary' && results[0].ok) await setCooldown(0);
+  return { ok: results.some((r) => r.ok), results };
+}
+
 /** Ask the provider which models this key can actually use. */
 async function listModels(settings) {
   const provider = QA_PROVIDERS[settings.provider];
   if (!provider || typeof provider.modelsRequest !== 'function') {
     throw new Error('That provider cannot list models.');
   }
-  const { url, headers } = provider.modelsRequest(settings.apiKey);
+  let keys = keysFor(settings);
+  if (!keys.length) throw new Error('No API key is configured.');
+  if (keys.length > 1 && (await cooldownUntil()) > Date.now()) keys = keys.slice(1).concat(keys[0]);
+  const { url, headers } = provider.modelsRequest(keys[0].key);
 
   let res;
   try {
@@ -381,9 +505,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // the form, so you can verify a key before saving it.
   if (message.type === 'QA_TEST') {
     const settings = Object.assign({}, QA_DEFAULTS, message.settings || {});
-    askCloud(settings, 'Define the word "test" in three words.')
-      .then((text) => sendResponse({ ok: true, sample: tidy(text) }))
-      .catch((err) => sendResponse({ ok: false, message: (err && err.message) || 'Test failed.' }));
+    testKeys(settings).then(sendResponse);
     return true;   // keep the channel open for the async reply
   }
 

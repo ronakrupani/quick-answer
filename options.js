@@ -10,6 +10,7 @@
   const $ = (id) => document.getElementById(id);
   const providerSel = $('provider');
   const keyInput = $('key');
+  const backupInput = $('backup-key');
   const modelInput = $('model');
   const modelList = $('model-list');
   const statusEl = $('status');
@@ -66,6 +67,8 @@
     (modeRadio || $('m-builtin')).checked = true;
     providerSel.value = QA_PROVIDERS[current.provider] ? current.provider : 'anthropic';
     keyInput.value = current.apiKey || '';
+    backupInput.value = current.backupKey || '';
+    chrome.storage.local.get('lastFailover', (r) => showFailoverNote(r && r.lastFailover));
     syncProviderFields(true);
     modelInput.value = current.model || QA_PROVIDERS[providerSel.value].defaultModel;
     syncCloudVisibility();
@@ -78,17 +81,34 @@
   }
   providerSel.addEventListener('change', () => { syncProviderFields(false); say(''); });
 
-  $('reveal').addEventListener('click', () => {
-    const shown = keyInput.type === 'text';
-    keyInput.type = shown ? 'password' : 'text';
-    $('reveal').textContent = shown ? 'Show' : 'Hide';
-  });
+  function wireReveal(buttonId, input) {
+    $(buttonId).addEventListener('click', () => {
+      const shown = input.type === 'text';
+      input.type = shown ? 'password' : 'text';
+      $(buttonId).textContent = shown ? 'Show' : 'Hide';
+    });
+  }
+  wireReveal('reveal', keyInput);
+  wireReveal('reveal-backup', backupInput);
+
+  // Tell the user when the primary was last skipped, so an exhausted key
+  // does not go unnoticed just because the backup kept things working.
+  function showFailoverNote(info) {
+    const note = $('failover-note');
+    if (!info || !info.at) { note.hidden = true; return; }
+    const when = new Date(info.at);
+    note.textContent = 'Primary key was skipped ' + when.toLocaleString() +
+      ' (' + (info.reason || 'failed') + '). The backup handled it. ' +
+      'Run Test connection once the primary is fixed.';
+    note.hidden = false;
+  }
 
   function collect() {
     return {
       mode: selectedMode(),
       provider: providerSel.value,
       apiKey: keyInput.value.trim(),
+      backupKey: backupInput.value.trim(),
       model: modelInput.value.trim() || QA_PROVIDERS[providerSel.value].defaultModel
     };
   }
@@ -96,6 +116,9 @@
   function validate(settings) {
     if (settings.mode === 'builtin') return null;
     if (!settings.apiKey) return 'Enter an API key, or switch to "Built-in AI only".';
+    if (settings.backupKey && settings.backupKey === settings.apiKey) {
+      return 'The backup key is the same as the primary. Leave it blank or use a different key.';
+    }
     return null;
   }
 
@@ -144,7 +167,21 @@
       $('test').disabled = false;
       if (chrome.runtime.lastError) return say(chrome.runtime.lastError.message, 'bad');
       if (!res) return say('No response from the extension service worker.', 'bad');
-      say(res.ok ? `Working. Answered: "${res.sample}"` : res.message, res.ok ? 'ok' : 'bad');
+      if (!res.results || !res.results.length) return say(res.message || 'Test failed.', 'bad');
+      statusEl.textContent = '';
+      statusEl.className = '';
+      for (const r of res.results) {
+        const line = document.createElement('span');
+        line.className = 'r ' + (r.ok ? 'ok' : 'bad');
+        const label = r.slot === 'backup' ? 'Backup' : 'Primary';
+        line.textContent = r.ok
+          ? `${label} key: working. Answered: "${r.sample}"`
+          : `${label} key: ${r.message}`;
+        statusEl.appendChild(line);
+      }
+      if (res.results[0] && res.results[0].ok) {
+        chrome.storage.local.remove('lastFailover', () => showFailoverNote(null));
+      }
     });
   });
 })();

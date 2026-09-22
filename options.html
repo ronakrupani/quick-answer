@@ -22,6 +22,9 @@
   .row { display: flex; gap: 8px; align-items: center; }
   .row input { flex: 1; }
   .hint { color: #666; font-size: 12px; margin: 5px 0 0; }
+  .opt { font-weight: 400; color: #888; font-size: 12px; }
+  #failover-note { color: #8a6d1a; }
+  #status .r { display: block; }
   .radio { display: flex; gap: 9px; align-items: flex-start; margin: 9px 0; font-weight: 400; }
   .radio input { margin: 2px 0 0; }
   .radio span b { display: block; font-weight: 600; }
@@ -44,6 +47,7 @@
   @media (prefers-color-scheme: dark) {
     body { background: #1c1c1c; color: #ececec; }
     .lede, .hint, .radio span i { color: #a3a3a3; }
+    #failover-note { color: #e0c46c; }
     fieldset { border-color: rgba(255,255,255,.16); }
     select, input[type=text], input[type=password] { background: #262626; border-color: rgba(255,255,255,.22); }
     button { background: #2e2e2e; border-color: rgba(255,255,255,.22); }
@@ -85,6 +89,14 @@
         <button type="button" id="reveal">Show</button>
       </div>
       <p class="hint" id="key-hint"></p>
+
+      <label for="backup-key">Backup API key <span class="opt">optional</span></label>
+      <div class="row">
+        <input type="password" id="backup-key" autocomplete="off" spellcheck="false" placeholder="A second key for the same provider">
+        <button type="button" id="reveal-backup">Show</button>
+      </div>
+      <p class="hint">Used automatically when the primary key is out of credits, over its rate limit, or rejected. Same provider as above, for example a second account.</p>
+      <p class="hint" id="failover-note" hidden></p>
 
       <label for="model">Model</label>
       <div class="row">
