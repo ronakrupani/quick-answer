@@ -150,11 +150,13 @@ var QA_PROVIDERS = {
 
   google: {
     label: 'Google (Gemini API)',
-    defaultModel: 'gemini-2.0-flash',
-    models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite'],
+    // gemini-2.0-* is shut down. Google's models page is the source of truth,
+    // and "Load my models" reads the live list from your key.
+    defaultModel: 'gemini-3.5-flash-lite',
+    models: ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'],
     keyHint: 'Created in Google AI Studio.',
     keyUrl: 'https://aistudio.google.com/apikey',
-    modelHint: 'This is the cloud Gemini API, separate from the built-in on-device model.',
+    modelHint: 'flash-lite is the quickest and is plenty for one-line answers. This is the cloud Gemini API, separate from the built-in on-device model.',
     request(key, model, system, text) {
       return {
         // The key goes in a header, never in the query string, so it cannot

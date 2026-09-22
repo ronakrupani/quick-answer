@@ -226,7 +226,15 @@ async function callProvider(provider, key, model, text) {
     const detail = (json && provider.error(json)) || '';
     console.error('[Quick Answer]', provider.label, 'HTTP', res.status, detail || raw.slice(0, 300));
     let message;
-    if (res.status === 401 || res.status === 403) message = 'That API key was rejected.';
+    // A retired or mistyped model id is the most common failure by far, and
+    // every provider words it differently. Say what to do about it.
+    // All four providers answer 404 for a missing model; some use 400 with
+    // wording like the below. Neither is a key problem, so say what to do.
+    const modelGone = res.status === 404 ||
+      (res.status === 400 && /not found|does not exist|no longer (available|supported)|deprecated|unknown model|invalid model/i.test(detail));
+    if (modelGone) {
+      message = 'Model "' + model + '" is not available on this key. Open settings and press Load my models.';
+    } else if (res.status === 401 || res.status === 403) message = 'That API key was rejected.';
     else if (res.status === 402) message = 'That API key is out of credits.';
     else if (res.status === 429) message = 'Rate limited by ' + provider.label + '. Try again shortly.';
     else if (res.status >= 500) message = provider.label + ' is having trouble. Try again shortly.';

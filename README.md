@@ -77,7 +77,7 @@ These are inherent to how Chrome extensions and on-device models work, not bugs 
 - **One popup at a time.** Opening a new answer replaces the previous popup.
 - **Cross-origin iframes.** Selections inside an iframe are handled, but the popup is drawn inside that frame, so it is clipped to the frame's bounds.
 - **API answers do not stream.** Hosted models reply in about a second and the answer is one sentence, so the popup shows the loading dots and then the finished answer. Streaming is used for the built-in model, where it genuinely helps.
-- **Model ids go stale.** Providers retire models, and their own docs lag behind. Groq retired two Llama ids in August 2026 while its models page still listed them. Any hardcoded default in this extension will eventually rot, so press **Load my models** and pick from the live list rather than trusting the defaults. The Model box also accepts any id you type.
+- **Model ids go stale.** Providers retire models, and their own docs lag behind. Groq retired two Llama ids in August 2026 while its models page still listed them, and Google shut down the whole gemini-2.0 line. Any hardcoded default in this extension will eventually rot. When a provider rejects the model, the popup now says so by name and points you at **Load my models**, which reads the live list from your key. The Model box also accepts any id you type.
 - **The browser-access header is unverified.** Anthropic blocks browser-origin requests by default. The extension sends `anthropic-dangerous-direct-browser-access: true`, which an extension service worker may not need. It is harmless if the server ignores it. **Test connection** tells you the truth in one click.
 
 ## How to update
