@@ -210,7 +210,8 @@ var QA_DEFAULTS = {
   provider: 'anthropic',
   apiKey: '',           // primary key
   backupKey: '',        // optional; used when the primary is rejected, rate limited, or out of credits
-  model: ''
+  model: '',            // primary model; blank means the provider default
+  backupModel: ''       // model for the backup key; blank means same as primary
 };
 
 if (typeof module !== 'undefined' && module.exports) {

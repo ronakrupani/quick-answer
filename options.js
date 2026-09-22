@@ -11,6 +11,8 @@
   const providerSel = $('provider');
   const keyInput = $('key');
   const backupInput = $('backup-key');
+  const backupModelInput = $('backup-model');
+  const backupModelList = $('backup-model-list');
   const modelInput = $('model');
   const modelList = $('model-list');
   const statusEl = $('status');
@@ -49,7 +51,8 @@
     }
     $('model-hint').textContent = p.modelHint;
     modelList.textContent = '';
-    for (const m of p.models) modelList.append(new Option(m));
+    backupModelList.textContent = '';
+    for (const m of p.models) { modelList.append(new Option(m)); backupModelList.append(new Option(m)); }
     if (!keepModel) modelInput.value = p.defaultModel;
     modelInput.placeholder = p.defaultModel;
   }
@@ -68,6 +71,7 @@
     providerSel.value = QA_PROVIDERS[current.provider] ? current.provider : 'anthropic';
     keyInput.value = current.apiKey || '';
     backupInput.value = current.backupKey || '';
+    backupModelInput.value = current.backupModel || '';
     chrome.storage.local.get('lastFailover', (r) => showFailoverNote(r && r.lastFailover));
     syncProviderFields(true);
     modelInput.value = current.model || QA_PROVIDERS[providerSel.value].defaultModel;
@@ -109,6 +113,7 @@
       provider: providerSel.value,
       apiKey: keyInput.value.trim(),
       backupKey: backupInput.value.trim(),
+      backupModel: backupModelInput.value.trim(),
       model: modelInput.value.trim() || QA_PROVIDERS[providerSel.value].defaultModel
     };
   }
@@ -124,27 +129,37 @@
 
   // Provider docs go stale (Groq retired two model ids while their models page
   // still advertised them). This asks the provider what the key can actually use.
-  $('load-models').addEventListener('click', () => {
-    const settings = collect();
-    if (!settings.apiKey) return say('Enter an API key first.', 'bad');
-    say('Loading models...', 'busy');
-    $('load-models').disabled = true;
-    chrome.runtime.sendMessage({ type: 'QA_MODELS', settings }, (res) => {
-      $('load-models').disabled = false;
-      if (chrome.runtime.lastError) return say(chrome.runtime.lastError.message, 'bad');
-      if (!res) return say('No response from the extension service worker.', 'bad');
-      if (!res.ok) return say(res.message, 'bad');
-      modelList.textContent = '';
-      for (const m of res.models) modelList.append(new Option(m));
-      if (res.models.indexOf(modelInput.value) === -1) {
-        const was = modelInput.value;
-        modelInput.value = res.models[0];
-        return say(`"${was}" is not on your account. Switched to ${res.models[0]}. ` +
-                   `${res.models.length} models available in the dropdown.`, 'ok');
-      }
-      say(`${res.models.length} models available. "${modelInput.value}" is valid.`, 'ok');
+  function wireLoadModels(buttonId, slot, input, list) {
+    $(buttonId).addEventListener('click', () => {
+      const settings = collect();
+      const key = slot === 'backup' ? settings.backupKey : settings.apiKey;
+      if (!key) return say(slot === 'backup' ? 'Enter a backup API key first.' : 'Enter an API key first.', 'bad');
+      say('Loading models...', 'busy');
+      $(buttonId).disabled = true;
+      chrome.runtime.sendMessage({ type: 'QA_MODELS', settings, slot }, (res) => {
+        $(buttonId).disabled = false;
+        if (chrome.runtime.lastError) return say(chrome.runtime.lastError.message, 'bad');
+        if (!res) return say('No response from the extension service worker.', 'bad');
+        if (!res.ok) return say(res.message, 'bad');
+        list.textContent = '';
+        for (const m of res.models) list.append(new Option(m));
+        const label = slot === 'backup' ? 'Backup' : 'Primary';
+        // A blank backup model means "same as primary", which is a valid choice.
+        if (slot === 'backup' && !input.value) {
+          return say(`${label} key: ${res.models.length} models available in the dropdown. Leave blank to match the primary.`, 'ok');
+        }
+        if (res.models.indexOf(input.value) === -1) {
+          const was = input.value;
+          input.value = res.models[0];
+          return say(`${label} key: "${was}" is not on this account. Switched to ${res.models[0]}. ` +
+                     `${res.models.length} models available in the dropdown.`, 'ok');
+        }
+        say(`${label} key: ${res.models.length} models available. "${input.value}" is valid.`, 'ok');
+      });
     });
-  });
+  }
+  wireLoadModels('load-models', 'primary', modelInput, modelList);
+  wireLoadModels('load-backup-models', 'backup', backupModelInput, backupModelList);
 
   $('save').addEventListener('click', () => {
     const settings = collect();
@@ -174,9 +189,10 @@
         const line = document.createElement('span');
         line.className = 'r ' + (r.ok ? 'ok' : 'bad');
         const label = r.slot === 'backup' ? 'Backup' : 'Primary';
+        const on = r.model ? ` (${r.model})` : '';
         line.textContent = r.ok
-          ? `${label} key: working. Answered: "${r.sample}"`
-          : `${label} key: ${r.message}`;
+          ? `${label} key${on}: working. Answered: "${r.sample}"`
+          : `${label} key${on}: ${r.message}`;
         statusEl.appendChild(line);
       }
       if (res.results[0] && res.results[0].ok) {

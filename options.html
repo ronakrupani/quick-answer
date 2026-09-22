@@ -96,6 +96,14 @@
         <button type="button" id="reveal-backup">Show</button>
       </div>
       <p class="hint">Used automatically when the primary key is out of credits, over its rate limit, or rejected. Same provider as above, for example a second account.</p>
+
+      <label for="backup-model">Backup model <span class="opt">optional</span></label>
+      <div class="row">
+        <input type="text" id="backup-model" list="backup-model-list" spellcheck="false" placeholder="Same as primary">
+        <button type="button" id="load-backup-models">Load my models</button>
+      </div>
+      <datalist id="backup-model-list"></datalist>
+      <p class="hint">Leave blank to use the primary model. Set it to run the backup on a different model, for example a cheaper one or one whose free tier is counted separately.</p>
       <p class="hint" id="failover-note" hidden></p>
 
       <label for="model">Model</label>

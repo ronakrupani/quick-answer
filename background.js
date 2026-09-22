@@ -147,12 +147,19 @@ function cloudReady(settings) {
 
 /* ------------------------------------------------------------ key failover */
 
-/** Ordered keys to try. The primary goes first unless it is cooling down. */
+/**
+ * Ordered keys to try, each with the model it should use. The backup can run
+ * a different model, for example a cheaper one, or one whose free tier is
+ * counted separately. A blank backup model means "same as the primary".
+ */
 function keysFor(settings) {
+  const provider = QA_PROVIDERS[settings.provider];
+  const primaryModel = settings.model || (provider && provider.defaultModel) || '';
+  const backupModel = settings.backupModel || primaryModel;
   const out = [];
-  if (settings.apiKey) out.push({ slot: 'primary', key: settings.apiKey });
+  if (settings.apiKey) out.push({ slot: 'primary', key: settings.apiKey, model: primaryModel });
   if (settings.backupKey && settings.backupKey !== settings.apiKey) {
-    out.push({ slot: 'backup', key: settings.backupKey });
+    out.push({ slot: 'backup', key: settings.backupKey, model: backupModel });
   }
   return out;
 }
@@ -263,7 +270,6 @@ async function callProvider(provider, key, model, text) {
 async function askCloud(settings, text) {
   const provider = QA_PROVIDERS[settings.provider];
   if (!provider) throw new Error('That provider is not configured.');
-  const model = settings.model || provider.defaultModel;
 
   let keys = keysFor(settings);
   if (!keys.length) throw new Error('No API key is configured.');
@@ -276,7 +282,7 @@ async function askCloud(settings, text) {
 
   let lastErr = null;
   for (let i = 0; i < keys.length; i++) {
-    const { slot, key } = keys[i];
+    const { slot, key, model } = keys[i];
     try {
       const answer = await callProvider(provider, key, model, text);
       if (slot === 'backup' && lastErr) {
@@ -310,11 +316,10 @@ async function testKeys(settings) {
   if (!provider || !keys.length) {
     return { ok: false, results: [], message: 'No API key is configured.' };
   }
-  const model = settings.model || provider.defaultModel;
-  const results = await Promise.all(keys.map(({ slot, key }) =>
+  const results = await Promise.all(keys.map(({ slot, key, model }) =>
     callProvider(provider, key, model, 'Define the word "test" in three words.')
-      .then((text) => ({ slot, ok: true, sample: tidy(text) }))
-      .catch((err) => ({ slot, ok: false, message: (err && err.message) || 'Test failed.' }))
+      .then((text) => ({ slot, model, ok: true, sample: tidy(text) }))
+      .catch((err) => ({ slot, model, ok: false, message: (err && err.message) || 'Test failed.' }))
   ));
   // A healthy primary means any cooldown on it is stale.
   if (results[0] && results[0].slot === 'primary' && results[0].ok) await setCooldown(0);
@@ -322,14 +327,15 @@ async function testKeys(settings) {
 }
 
 /** Ask the provider which models this key can actually use. */
-async function listModels(settings) {
+async function listModels(settings, slot) {
   const provider = QA_PROVIDERS[settings.provider];
   if (!provider || typeof provider.modelsRequest !== 'function') {
     throw new Error('That provider cannot list models.');
   }
   let keys = keysFor(settings);
-  if (!keys.length) throw new Error('No API key is configured.');
-  if (keys.length > 1 && (await cooldownUntil()) > Date.now()) keys = keys.slice(1).concat(keys[0]);
+  if (slot) keys = keys.filter((k) => k.slot === slot);
+  if (!keys.length) throw new Error(slot === 'backup' ? 'Enter a backup API key first.' : 'No API key is configured.');
+  if (!slot && keys.length > 1 && (await cooldownUntil()) > Date.now()) keys = keys.slice(1).concat(keys[0]);
   const { url, headers } = provider.modelsRequest(keys[0].key);
 
   let res;
@@ -520,7 +526,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // The options page "Load my models" button.
   if (message.type === 'QA_MODELS') {
     const settings = Object.assign({}, QA_DEFAULTS, message.settings || {});
-    listModels(settings)
+    listModels(settings, message.slot)
       .then((models) => sendResponse({ ok: true, models }))
       .catch((err) => sendResponse({ ok: false, message: (err && err.message) || 'Could not list models.' }));
     return true;
