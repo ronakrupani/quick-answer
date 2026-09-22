@@ -75,7 +75,7 @@
   </fieldset>
 
   <div class="cloud-only">
-    <p class="warn"><b>Your selected text leaves your machine.</b> Whatever you highlight is sent to the provider you pick below, under your own account and billing. Your key is stored in this browser profile only and is never synced or sent anywhere except that provider.</p>
+    <p class="warn"><b>Your selected text leaves your machine.</b> Whatever you highlight is sent to the provider you pick below, under your own account and billing. Your keys are stored in this browser profile only and are never synced or sent anywhere except their own provider.</p>
 
     <fieldset>
       <legend>API</legend>
@@ -90,22 +90,6 @@
       </div>
       <p class="hint" id="key-hint"></p>
 
-      <label for="backup-key">Backup API key <span class="opt">optional</span></label>
-      <div class="row">
-        <input type="password" id="backup-key" autocomplete="off" spellcheck="false" placeholder="A second key for the same provider">
-        <button type="button" id="reveal-backup">Show</button>
-      </div>
-      <p class="hint">Used automatically when the primary key is out of credits, over its rate limit, or rejected. Same provider as above, for example a second account.</p>
-
-      <label for="backup-model">Backup model <span class="opt">optional</span></label>
-      <div class="row">
-        <input type="text" id="backup-model" list="backup-model-list" spellcheck="false" placeholder="Same as primary">
-        <button type="button" id="load-backup-models">Load my models</button>
-      </div>
-      <datalist id="backup-model-list"></datalist>
-      <p class="hint">Leave blank to use the primary model. Set it to run the backup on a different model, for example a cheaper one or one whose free tier is counted separately.</p>
-      <p class="hint" id="failover-note" hidden></p>
-
       <label for="model">Model</label>
       <div class="row">
         <input type="text" id="model" list="model-list" spellcheck="false">
@@ -113,6 +97,30 @@
       </div>
       <datalist id="model-list"></datalist>
       <p class="hint" id="model-hint"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Backup <span class="opt">optional</span></legend>
+      <p class="hint" style="margin:0 0 10px">Used automatically when the primary key is out of credits, over its rate limit, or rejected. It can be a different provider, so two free tiers stack, for example Gemini as primary and Groq as backup.</p>
+
+      <label for="backup-provider">Backup provider</label>
+      <select id="backup-provider"></select>
+
+      <label for="backup-key">Backup API key</label>
+      <div class="row">
+        <input type="password" id="backup-key" autocomplete="off" spellcheck="false" placeholder="Paste a second key">
+        <button type="button" id="reveal-backup">Show</button>
+      </div>
+      <p class="hint" id="backup-key-hint"></p>
+
+      <label for="backup-model">Backup model</label>
+      <div class="row">
+        <input type="text" id="backup-model" list="backup-model-list" spellcheck="false">
+        <button type="button" id="load-backup-models">Load my models</button>
+      </div>
+      <datalist id="backup-model-list"></datalist>
+      <p class="hint" id="backup-model-hint"></p>
+      <p class="hint" id="failover-note" hidden></p>
     </fieldset>
   </div>
 

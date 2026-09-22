@@ -57,12 +57,12 @@ Three modes:
 
 Supported providers: Anthropic, OpenAI, Groq, and the Google Gemini API. Paste a key, then press **Load my models** to pull the list your key can actually use, and **Test connection** to confirm it works before saving. Cheap models are more than adequate here, since answers are one sentence.
 
-**Backup key.** You can add a second key for the same provider, for example from a second account. It is used automatically when the primary key is out of credits, over its rate limit, or rejected. The backup can run a different model from the primary, for example a cheaper one, or one whose free tier is counted separately. Leave the backup model blank to use the same model as the primary. Each key has its own **Load my models** button, since two accounts can have access to different models. Once that happens the primary is skipped for ten minutes so every request does not burn a failed call on it, and the settings page shows a note saying when and why, so an exhausted key does not go unnoticed just because the backup kept things working. **Test connection** checks both keys separately. Server errors and network failures do not trigger the backup, since it would hit the same wall.
+**Backup.** You can add a second key, and it can be on a different provider entirely, for example Gemini as the primary and Groq as the backup, so their free tiers stack. It is used automatically when the primary key is out of credits, over its rate limit, or rejected. The backup has its own provider, key, and model. Leave the backup provider on "Same as primary" for a second account on the same service. Leave the backup model blank for that provider's default. Each key has its own **Load my models** button, since two accounts can have access to different models. Once that happens the primary is skipped for ten minutes so every request does not burn a failed call on it, and the settings page shows a note saying when and why, so an exhausted key does not go unnoticed just because the backup kept things working. **Test connection** checks both keys separately. Server errors and network failures do not trigger the backup, since it would hit the same wall.
 
 Where the key is kept:
 
 - In `chrome.storage.local`, which lives in this browser profile on this machine. It is not `storage.sync`, so it never travels to your Google account or your other devices.
-- Both keys are sent to the provider you chose and nowhere else. Neither is ever written to the console or to any log.
+- Each key is sent only to its own provider and nowhere else. Neither is ever written to the console or to any log.
 - Anyone with access to your computer and your Chrome profile can read it, the same as a saved password. Treat it accordingly, and revoke the key from the provider's dashboard if the machine is shared or lost.
 
 ## Known limits

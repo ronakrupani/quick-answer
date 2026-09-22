@@ -148,18 +148,29 @@ function cloudReady(settings) {
 /* ------------------------------------------------------------ key failover */
 
 /**
- * Ordered keys to try, each with the model it should use. The backup can run
- * a different model, for example a cheaper one, or one whose free tier is
- * counted separately. A blank backup model means "same as the primary".
+ * Ordered slots to try. Each carries its own provider, key and model, so the
+ * backup can live on a different service entirely (Gemini primary, Groq
+ * backup, so their free tiers stack). Blank backup provider means "same as
+ * primary"; blank backup model means that provider's default, or the primary
+ * model when the providers match.
  */
 function keysFor(settings) {
-  const provider = QA_PROVIDERS[settings.provider];
-  const primaryModel = settings.model || (provider && provider.defaultModel) || '';
-  const backupModel = settings.backupModel || primaryModel;
+  const pId = settings.provider;
+  const bId = settings.backupProvider || pId;
+  const p = QA_PROVIDERS[pId];
+  const b = QA_PROVIDERS[bId];
+  const primaryModel = settings.model || (p && p.defaultModel) || '';
+  const backupModel = settings.backupModel ||
+    (bId === pId ? primaryModel : (b && b.defaultModel) || '');
+
   const out = [];
-  if (settings.apiKey) out.push({ slot: 'primary', key: settings.apiKey, model: primaryModel });
-  if (settings.backupKey && settings.backupKey !== settings.apiKey) {
-    out.push({ slot: 'backup', key: settings.backupKey, model: backupModel });
+  if (p && settings.apiKey) {
+    out.push({ slot: 'primary', providerId: pId, provider: p, key: settings.apiKey, model: primaryModel });
+  }
+  // The same key twice on the same provider is not a backup.
+  const dup = bId === pId && settings.backupKey === settings.apiKey;
+  if (b && settings.backupKey && !dup) {
+    out.push({ slot: 'backup', providerId: bId, provider: b, key: settings.backupKey, model: backupModel });
   }
   return out;
 }
@@ -249,6 +260,7 @@ async function callProvider(provider, key, model, text) {
     const err = new Error(message);
     err.status = res.status;
     err.detail = detail;
+    err.modelGone = modelGone;
     throw err;
   }
   if (!json) throw new Error(provider.label + ' returned a response we could not read.');
@@ -268,9 +280,7 @@ async function callProvider(provider, key, model, text) {
  * Throws an Error whose message is safe to show in the popup.
  */
 async function askCloud(settings, text) {
-  const provider = QA_PROVIDERS[settings.provider];
-  if (!provider) throw new Error('That provider is not configured.');
-
+  if (!QA_PROVIDERS[settings.provider]) throw new Error('That provider is not configured.');
   let keys = keysFor(settings);
   if (!keys.length) throw new Error('No API key is configured.');
 
@@ -282,18 +292,23 @@ async function askCloud(settings, text) {
 
   let lastErr = null;
   for (let i = 0; i < keys.length; i++) {
-    const { slot, key, model } = keys[i];
+    const { slot, provider, key, model } = keys[i];
     try {
       const answer = await callProvider(provider, key, model, text);
       if (slot === 'backup' && lastErr) {
-        console.log('[Quick Answer] primary key failed (' + lastErr.message + '), answered with backup.');
+        console.log('[Quick Answer] primary failed (' + lastErr.message + '), answered with backup on ' + provider.label + '.');
       }
       return answer;
     } catch (err) {
       lastErr = err;
-      const more = i < keys.length - 1;
-      if (more && shouldFailover(err)) {
-        console.warn('[Quick Answer]', slot, 'key failed:', err.message, '- trying the', keys[i + 1].slot);
+      const next = keys[i + 1];
+      // A missing model is worth retrying only if the next slot would run a
+      // different provider or model; the same model on a second key of the
+      // same service would fail the same way.
+      const differentTarget = next && (next.providerId !== keys[i].providerId || next.model !== model);
+      if (next && (shouldFailover(err) || (err.modelGone && differentTarget))) {
+        console.warn('[Quick Answer]', slot, '(' + provider.label + ') failed:', err.message,
+                     '- trying the', next.slot, '(' + next.provider.label + ')');
         if (slot === 'primary') {
           await setCooldown(Date.now() + COOLDOWN_MS);
           await noteFailover(slot, err.message);
@@ -311,15 +326,14 @@ async function askCloud(settings, text) {
  * can show the state of each rather than only whether one of them works.
  */
 async function testKeys(settings) {
-  const provider = QA_PROVIDERS[settings.provider];
   const keys = keysFor(settings);
-  if (!provider || !keys.length) {
+  if (!keys.length) {
     return { ok: false, results: [], message: 'No API key is configured.' };
   }
-  const results = await Promise.all(keys.map(({ slot, key, model }) =>
+  const results = await Promise.all(keys.map(({ slot, provider, providerId, key, model }) =>
     callProvider(provider, key, model, 'Define the word "test" in three words.')
-      .then((text) => ({ slot, model, ok: true, sample: tidy(text) }))
-      .catch((err) => ({ slot, model, ok: false, message: (err && err.message) || 'Test failed.' }))
+      .then((text) => ({ slot, provider: providerId, label: provider.label, model, ok: true, sample: tidy(text) }))
+      .catch((err) => ({ slot, provider: providerId, label: provider.label, model, ok: false, message: (err && err.message) || 'Test failed.' }))
   ));
   // A healthy primary means any cooldown on it is stale.
   if (results[0] && results[0].slot === 'primary' && results[0].ok) await setCooldown(0);
@@ -328,14 +342,12 @@ async function testKeys(settings) {
 
 /** Ask the provider which models this key can actually use. */
 async function listModels(settings, slot) {
-  const provider = QA_PROVIDERS[settings.provider];
-  if (!provider || typeof provider.modelsRequest !== 'function') {
-    throw new Error('That provider cannot list models.');
-  }
   let keys = keysFor(settings);
   if (slot) keys = keys.filter((k) => k.slot === slot);
   if (!keys.length) throw new Error(slot === 'backup' ? 'Enter a backup API key first.' : 'No API key is configured.');
   if (!slot && keys.length > 1 && (await cooldownUntil()) > Date.now()) keys = keys.slice(1).concat(keys[0]);
+  const provider = keys[0].provider;
+  if (typeof provider.modelsRequest !== 'function') throw new Error('That provider cannot list models.');
   const { url, headers } = provider.modelsRequest(keys[0].key);
 
   let res;

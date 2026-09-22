@@ -11,6 +11,7 @@
   const providerSel = $('provider');
   const keyInput = $('key');
   const backupInput = $('backup-key');
+  const backupProviderSel = $('backup-provider');
   const backupModelInput = $('backup-model');
   const backupModelList = $('backup-model-list');
   const modelInput = $('model');
@@ -23,6 +24,43 @@
 
   for (const [id, p] of Object.entries(QA_PROVIDERS)) {
     providerSel.append(new Option(p.label, id));
+  }
+  backupProviderSel.append(new Option('Same as primary', ''));
+  for (const [id, p] of Object.entries(QA_PROVIDERS)) {
+    backupProviderSel.append(new Option(p.label, id));
+  }
+
+  /** The provider the backup slot actually resolves to. */
+  function backupProviderId() {
+    return backupProviderSel.value || providerSel.value;
+  }
+
+  function renderKeyHint(el, p) {
+    el.textContent = p.keyHint + ' ';
+    if (p.keyUrl) {
+      const a = document.createElement('a');
+      a.href = p.keyUrl;
+      a.target = '_blank';
+      a.rel = 'noreferrer noopener';
+      a.textContent = 'Get a key';
+      el.appendChild(a);
+    }
+  }
+
+  function syncBackupFields(keepModel) {
+    const bId = backupProviderId();
+    const b = QA_PROVIDERS[bId];
+    renderKeyHint($('backup-key-hint'), b);
+    backupModelList.textContent = '';
+    for (const m of b.models) backupModelList.append(new Option(m));
+    const same = !backupProviderSel.value;
+    // Blank means "same model as primary" only when the provider is the same;
+    // across providers a blank means that provider's own default.
+    backupModelInput.placeholder = same ? 'Same as primary' : b.defaultModel;
+    $('backup-model-hint').textContent = same
+      ? 'Leave blank to use the primary model. ' + b.modelHint
+      : b.modelHint;
+    if (!keepModel) backupModelInput.value = '';
   }
 
   function selectedMode() {
@@ -39,20 +77,12 @@
 
     // Hint plus a direct link to that provider's key page. Built with DOM
     // calls rather than innerHTML so provider strings are never parsed as markup.
-    const hint = $('key-hint');
-    hint.textContent = p.keyHint + ' ';
-    if (p.keyUrl) {
-      const a = document.createElement('a');
-      a.href = p.keyUrl;
-      a.target = '_blank';
-      a.rel = 'noreferrer noopener';
-      a.textContent = 'Get a key';
-      hint.appendChild(a);
-    }
+    renderKeyHint($('key-hint'), p);
     $('model-hint').textContent = p.modelHint;
     modelList.textContent = '';
-    backupModelList.textContent = '';
-    for (const m of p.models) { modelList.append(new Option(m)); backupModelList.append(new Option(m)); }
+    for (const m of p.models) modelList.append(new Option(m));
+    // A backup set to "same as primary" follows the primary provider.
+    syncBackupFields(true);
     if (!keepModel) modelInput.value = p.defaultModel;
     modelInput.placeholder = p.defaultModel;
   }
@@ -71,7 +101,9 @@
     providerSel.value = QA_PROVIDERS[current.provider] ? current.provider : 'anthropic';
     keyInput.value = current.apiKey || '';
     backupInput.value = current.backupKey || '';
+    backupProviderSel.value = QA_PROVIDERS[current.backupProvider] ? current.backupProvider : '';
     backupModelInput.value = current.backupModel || '';
+    syncBackupFields(true);
     chrome.storage.local.get('lastFailover', (r) => showFailoverNote(r && r.lastFailover));
     syncProviderFields(true);
     modelInput.value = current.model || QA_PROVIDERS[providerSel.value].defaultModel;
@@ -84,6 +116,7 @@
     r.addEventListener('change', () => { syncCloudVisibility(); say(''); });
   }
   providerSel.addEventListener('change', () => { syncProviderFields(false); say(''); });
+  backupProviderSel.addEventListener('change', () => { syncBackupFields(false); say(''); });
 
   function wireReveal(buttonId, input) {
     $(buttonId).addEventListener('click', () => {
@@ -112,6 +145,7 @@
       mode: selectedMode(),
       provider: providerSel.value,
       apiKey: keyInput.value.trim(),
+      backupProvider: backupProviderSel.value,
       backupKey: backupInput.value.trim(),
       backupModel: backupModelInput.value.trim(),
       model: modelInput.value.trim() || QA_PROVIDERS[providerSel.value].defaultModel
@@ -121,7 +155,8 @@
   function validate(settings) {
     if (settings.mode === 'builtin') return null;
     if (!settings.apiKey) return 'Enter an API key, or switch to "Built-in AI only".';
-    if (settings.backupKey && settings.backupKey === settings.apiKey) {
+    const sameProvider = !settings.backupProvider || settings.backupProvider === settings.provider;
+    if (sameProvider && settings.backupKey && settings.backupKey === settings.apiKey) {
       return 'The backup key is the same as the primary. Leave it blank or use a different key.';
     }
     return null;
@@ -146,7 +181,9 @@
         const label = slot === 'backup' ? 'Backup' : 'Primary';
         // A blank backup model means "same as primary", which is a valid choice.
         if (slot === 'backup' && !input.value) {
-          return say(`${label} key: ${res.models.length} models available in the dropdown. Leave blank to match the primary.`, 'ok');
+          const same = !backupProviderSel.value;
+          return say(`${label} key: ${res.models.length} models available in the dropdown. ` +
+                     (same ? 'Leave blank to match the primary.' : `Leave blank to use ${QA_PROVIDERS[backupProviderId()].defaultModel}.`), 'ok');
         }
         if (res.models.indexOf(input.value) === -1) {
           const was = input.value;
@@ -189,7 +226,7 @@
         const line = document.createElement('span');
         line.className = 'r ' + (r.ok ? 'ok' : 'bad');
         const label = r.slot === 'backup' ? 'Backup' : 'Primary';
-        const on = r.model ? ` (${r.model})` : '';
+        const on = ` (${[r.label, r.model].filter(Boolean).join(', ')})`;
         line.textContent = r.ok
           ? `${label} key${on}: working. Answered: "${r.sample}"`
           : `${label} key${on}: ${r.message}`;

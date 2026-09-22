@@ -209,9 +209,10 @@ var QA_DEFAULTS = {
   mode: 'builtin',      // 'builtin' | 'auto' | 'cloud'
   provider: 'anthropic',
   apiKey: '',           // primary key
+  backupProvider: '',   // provider for the backup key; blank means same as primary
   backupKey: '',        // optional; used when the primary is rejected, rate limited, or out of credits
   model: '',            // primary model; blank means the provider default
-  backupModel: ''       // model for the backup key; blank means same as primary
+  backupModel: ''       // model for the backup key; blank means the backup provider's default
 };
 
 if (typeof module !== 'undefined' && module.exports) {
